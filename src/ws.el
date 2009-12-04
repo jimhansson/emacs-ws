@@ -37,11 +37,12 @@
 
 (defun create-empty-namespace (ns-name) 
   (list (cons 'name ns-name)
-        (cons 'imports  '())
-        (cons 'aliases  '())
-        (cons 'types    '())
-        (cons 'elements '())
-        (cons 'messages '())))
+        (cons 'imports    '())
+        (cons 'aliases    '())
+        (cons 'types      '())
+        (cons 'elements   '())
+        (cons 'attributes '())
+        (cons 'messages   '())))
 
 (defun namespace-name (namespace) (cdr (assoc 'name namespace)))
 
@@ -65,6 +66,9 @@
 
 (defun add-element! (namespace name element)
   (add-namespace-entry! namespace 'elements (cons name element)))
+
+(defun add-attribute! (namespace name attribute)
+  (add-namespace-entry! namespace 'attributes (cons name attribute)))
 
 (defun expand-alias (namespace alias-name)
   (let ((aliases (cdr (assoc 'aliases namespace))))
@@ -115,6 +119,9 @@
 (defun get-element (namespace name)
   (lookup-with-imports namespace 'elements name))
 
+(defun get-attribute (namespace name)
+  (lookup-with-imports namespace 'attributes name))
+
 
 ;; messages
 ;;---------
@@ -146,7 +153,9 @@
 
 (defun create-build-in-type-print-function (type-sample)
   `(lambda (my-ns tag-name) 
-     (concat "<" tag-name ">" ,type-sample "</"tag-name ">\n")))
+     (if tag-name
+         (concat "<" tag-name ">" ,type-sample "</"tag-name ">\n")
+       ,type-sample)))
 
 (defun define-simple-type (namespace type-node)
   (let ((simple-type (create-simple-type-print-function type-node))
@@ -169,7 +178,7 @@
   (cond ((xsd-complex-type-with-sequence? type-node)
          `(lambda (my-ns tag-name)
             (concat
-             "<" tag-name ">\n"
+             "<" tag-name ,@(mapcar 'invoke-attribute-print-function (xsd-attributes type-node)) ">\n"
              ,@(mapcar 'create-local-element-print-function (xsd-get-sequence-elements type-node))
              "</" tag-name ">\n")))
         (t `(lambda (my-ns tag-name) "Unknown complex type"))))
@@ -219,6 +228,31 @@
                    my-ns
                    ,(node-attribute-value element-node "name")))
         (t "Unknown element\n")))
+
+
+;;attributes
+;;----------
+(defun define-attribute (namespace attribute-node)
+  (let ((attribute (create-attribute-print-function attribute-node))
+        (name (node-attribute-value attribute-node "name")))
+    (add-attribute! namespace name attribute)))
+
+(defun create-attribute-print-function (attribute-node)
+  (let ((attribute-name (node-attribute-value attribute-node "name"))
+        (attribute-type (node-attribute-value attribute-node "type")))
+    `(lambda (my-ns tag-name) 
+       (concat " " ,attribute-name "=\""
+               (funcall (get-type my-ns ,attribute-type) nil)
+               "\""))))
+
+(defun invoke-attribute-print-function (attribute-node)
+  (cond ((not (null (node-attribute-value attribute-node "type")))
+         `(concat " " ,(node-attribute-value attribute-node "name") "=\"" 
+                 (funcall (get-type my-ns ,(node-attribute-value attribute-node "type")) nil)
+                 "\""))
+        ((not (null (node-attribute-value attribute-node "ref")))
+         `(funcall (get-attribute my-ns ,(node-attribute-value attribute-node "ref")) nil))
+        (t "Unknown attribute\n")))
 
 
 ;;build-in xsd namespace
@@ -325,6 +359,9 @@
   (filter (lambda (n) (equal (node-name n) (cons :http://www\.w3\.org/2001/XMLSchema "element")))
           (node-childs schema-node)))
     
+(defun xsd-attributes (some-node) 
+  (filter (lambda (n) (equal (node-name n) (cons :http://www\.w3\.org/2001/XMLSchema "attribute")))
+          (node-childs some-node)))
 
 (defun filter (predicat items)
   (defun iter (its)

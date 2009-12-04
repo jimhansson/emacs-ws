@@ -17,14 +17,16 @@
 
 (defun parse-xsd-tree (nxml-tree &optional additional-aliases)
   (let ((ns            (create-namespace (target-namespace nxml-tree)))
-        (aliases       (node-aliases nxml-tree))
-        (simple-types  (xsd-simple-types nxml-tree))
+        (aliases       (node-aliases      nxml-tree))
+        (simple-types  (xsd-simple-types  nxml-tree))
         (complex-types (xsd-complex-types nxml-tree))
-        (elements      (xsd-elements nxml-tree)))
+        (elements      (xsd-elements      nxml-tree))
+        (attributes    (xsd-attributes    nxml-tree)))
     (mapc (lambda (alias) (add-alias! ns (car alias) (cdr alias))) (append additional-aliases aliases))
     (mapc (lambda (simple-type) (define-simple-type ns simple-type)) simple-types)
     (mapc (lambda (complex-type) (define-complex-type ns complex-type)) complex-types)
     (mapc (lambda (element) (define-element ns element)) elements)
+    (mapc (lambda (attribute) (define-attribute ns attribute)) attributes)
     ns))
 
 

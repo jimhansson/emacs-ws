@@ -160,16 +160,16 @@
         (t `(lambda (my-ns tag-name) (cons tag-name "Simple type not by restriction, unsupported yet")))))
 
 (defun define-complex-type (namespace type-node)
-  (let ((complex-type (create-complex-type type-node))
+  (let ((complex-type (create-complex-type-print-function type-node))
         (name (node-attribute-value type-node "name")))
     (add-type! namespace name complex-type)))
 
-(defun create-complex-type (type-node)
+(defun create-complex-type-print-function (type-node)
   (cond ((xsd-complex-type-with-sequence? type-node)
          `(lambda (my-ns tag-name)
             (concat
              "<" tag-name ">\n"
-             ,@(mapcar 'create-local-element (xsd-get-sequence-elements type-node))
+             ,@(mapcar 'create-local-element-print-function (xsd-get-sequence-elements type-node))
              "</" tag-name ">\n")))
         (t `(lambda (my-ns tag-name) "Unknown complex type"))))
 
@@ -177,11 +177,11 @@
 ;; elements
 ;;---------
 (defun define-element (namespace element-node)
-  (let ((element (create-element element-node))
+  (let ((element (create-element-print-function element-node))
         (name (node-attribute-value element-node "name")))
     (add-element! namespace name element)))
 
-(defun create-element (element-node)
+(defun create-element-print-function (element-node)
   (let ((element-name (node-attribute-value element-node "name")))
     (cond ((not (null (node-attribute-value element-node "type")))
            `(lambda (my-ns tag-name) 
@@ -193,26 +193,35 @@
                        (or tag-name ,element-name))))
           (t `(lambda (my-ns tag-name) "Unknown element\n")))))
 
-(defun create-local-element (element-node)
+(defun create-local-element-print-function (element-node)
   (cond ((not (null (node-attribute-value element-node "type")))
          `(funcall (get-type my-ns ,(node-attribute-value element-node "type")) 
                    ,(node-attribute-value element-node "name")))
         ((not (null (node-attribute-value element-node "ref")))
          `(funcall (get-element my-ns ,(node-attribute-value element-node "ref")) nil))
+        ((xsd-element-with-inner-complex-type? element-node)
+         `(funcall (create-complex-type-print-function ',(car (node-childs element-node)))
+                   my-ns
+                   ,(node-attribute-value element-node "name")))
+        ((xsd-element-with-inner-simple-type? element-node)
+         `(funcall (create-simple-type-print-function ',(car (node-childs element-node)))
+                   my-ns
+                   ,(node-attribute-value element-node "name")))
         (t "Unknown element\n")))
 
 
 ;;build-in xsd namespace
 (defconst xsd-ns 
   (let ((ns (create-empty-namespace "http://www.w3.org/2001/XMLSchema")))
-    (define-build-in-type ns "string"   "string")
-    (define-build-in-type ns "int"      "1")
-    (define-build-in-type ns "decimal"  "1.0")
-    (define-build-in-type ns "date"     "2009-10-25")
-    (define-build-in-type ns "NMTOKEN"  "US")
-    (define-build-in-type ns "integer"  "1")
-    (define-build-in-type ns "dateTime" "2009-10-25T23:11:00.000-05:00")
-    (define-build-in-type ns "boolean"  "true")
+    (define-build-in-type ns "string"          "string")
+    (define-build-in-type ns "int"             "1")
+    (define-build-in-type ns "positiveInteger" "1")
+    (define-build-in-type ns "decimal"         "1.0")
+    (define-build-in-type ns "date"            "2009-10-25")
+    (define-build-in-type ns "NMTOKEN"         "US")
+    (define-build-in-type ns "integer"         "1")
+    (define-build-in-type ns "dateTime"        "2009-10-25T23:11:00.000-05:00")
+    (define-build-in-type ns "boolean"         "true")
     ns))
 
 
@@ -286,6 +295,16 @@
   (let ((childs (node-childs complex-type-node)))
     (and (not (null childs))
          (equal (node-name (car childs)) (cons :http://www\.w3\.org/2001/XMLSchema "sequence")))))
+
+(defun xsd-element-with-inner-complex-type? (element-node)
+  (let ((childs (node-childs element-node)))
+    (and (not (null childs))
+         (equal (node-name (car childs)) (cons :http://www\.w3\.org/2001/XMLSchema "complexType")))))
+
+(defun xsd-element-with-inner-simple-type? (element-node)
+  (let ((childs (node-childs element-node)))
+    (and (not (null childs))
+         (equal (node-name (car childs)) (cons :http://www\.w3\.org/2001/XMLSchema "simpleType")))))
 
 (defun xsd-get-sequence-elements (complex-type-node)
   (let ((sequence (car (node-childs complex-type-node))))

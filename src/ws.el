@@ -157,7 +157,8 @@
   (cond ((xsd-simple-type-by-restriction? type-node)
          `(lambda (my-ns tag-name) 
             (funcall (get-type my-ns ,(xsd-get-restriction-base-type type-node)) tag-name)))
-        (t `(lambda (my-ns tag-name) (cons tag-name "Simple type not by restriction, unsupported yet")))))
+        (t `(lambda (my-ns tag-name) 
+              (cons tag-name "Simple type not by restriction, unsupported yet")))))
 
 (defun define-complex-type (namespace type-node)
   (let ((complex-type (create-complex-type-print-function type-node))
@@ -191,6 +192,16 @@
            `(lambda (my-ns tag-name)
               (funcall (get-element my-ns ,(node-attribute-value element-node "ref")) 
                        (or tag-name ,element-name))))
+          ((xsd-element-with-inner-complex-type? element-node)
+           `(lambda (my-ns tag-name)
+              (funcall (create-complex-type-print-function ',(car (node-childs element-node)))
+                     my-ns
+                     ,(node-attribute-value element-node "name"))))
+          ((xsd-element-with-inner-simple-type? element-node)
+           `(lambda (my-ns tag-name)
+              (funcall (create-simple-type-print-function ',(car (node-childs element-node)))
+                     my-ns
+                     ,(node-attribute-value element-node "name"))))
           (t `(lambda (my-ns tag-name) "Unknown element\n")))))
 
 (defun create-local-element-print-function (element-node)

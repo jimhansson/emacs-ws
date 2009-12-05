@@ -311,6 +311,10 @@
         (cadr (split-string qname ":"))
       (car (split-string qname ":")))))
 
+(defun get-child-nodes-with-name (parent-node name) 
+  (filter (lambda (n) (equal (node-name n) name))
+          (node-childs parent-node)))
+
 
 ;; functions to get wsdl-specific nodes:
 (defun wsdl-get-messages (definitions-node) 

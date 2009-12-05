@@ -5,9 +5,9 @@
 (defun parse-wsdl (path)
   (let ((nxml-tree (nxml-parse-file path)))
     (let ((ns (create-namespace (target-namespace nxml-tree)))
-          (msgs (wsdl-messages nxml-tree))
+          (msgs (wsdl-get-messages nxml-tree))
           (aliases (node-aliases nxml-tree))
-          (schemas (wsdl-embedded-schemes nxml-tree)))
+          (schemas (wsdl-get-embedded-schemes nxml-tree)))
       (mapc (lambda (msg-node) (define-message ns msg-node)) msgs)
       (mapc (lambda (alias) (add-alias! ns (car alias) (cdr alias))) aliases)
       (mapc (lambda (schema) (add-import! ns (parse-xsd-tree schema aliases))) schemas)
@@ -136,7 +136,7 @@
   "Create function that print message"
   `(lambda (my-ns tag-name)
      (concat "<"  tag-name ">\n"
-             ,@(mapcar 'print-message-part (wsdl-message-parts message-node))
+             ,@(mapcar 'print-message-part (wsdl-get-message-parts message-node))
              "</" tag-name ">\n")))
 
 (defun print-message-part (message-part-node)
@@ -313,15 +313,15 @@
 
 
 ;; functions to get wsdl-specific nodes:
-(defun wsdl-messages (definitions-node) 
+(defun wsdl-get-messages (definitions-node) 
   (filter (lambda (n) (equal (node-name n) (cons :http://schemas\.xmlsoap\.org/wsdl/ "message")))
           (node-childs definitions-node)))
 
-(defun wsdl-message-parts (message-node)
+(defun wsdl-get-message-parts (message-node)
   (filter (lambda (n) (equal (node-name n) (cons :http://schemas\.xmlsoap\.org/wsdl/ "part")))
           (node-childs message-node)))
 
-(defun wsdl-embedded-schemes (definitions-node)
+(defun wsdl-get-embedded-schemes (definitions-node)
   (filter (lambda (n) (equal (node-name n) (cons :http://www\.w3\.org/2001/XMLSchema "schema")))
           (node-childs 
            (car (filter (lambda (n) (equal (node-name n) (cons :http://schemas\.xmlsoap\.org/wsdl/ "types")))

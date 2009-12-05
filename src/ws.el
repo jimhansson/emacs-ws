@@ -321,7 +321,7 @@
   (filter (lambda (n) (equal (node-name n) (cons :http://schemas\.xmlsoap\.org/wsdl/ "part")))
           (node-childs message-node)))
 
-(defun wsdl-get-embedded-schemes (definitions-node)
+(defun wsdl-get-embedded-schemes(definitions-node)
   (filter (lambda (n) (equal (node-name n) (cons :http://www\.w3\.org/2001/XMLSchema "schema")))
           (node-childs 
            (car (filter (lambda (n) (equal (node-name n) (cons :http://schemas\.xmlsoap\.org/wsdl/ "types")))

@@ -183,6 +183,12 @@
              "<" tag-name ,@(mapcar 'invoke-attribute-print-function (xsd-attributes type-node)) ">\n"
              ,@(mapcar 'create-local-element-print-function (xsd-get-sequence-elements type-node))
              "</" tag-name ">\n")))
+        ((xsd-complex-type-with-all? type-node)
+         `(lambda (my-ns tag-name)
+            (concat
+             "<" tag-name ,@(mapcar 'invoke-attribute-print-function (xsd-attributes type-node)) ">\n"
+             ,@(mapcar 'create-local-element-print-function (reverse (xsd-get-all-elements type-node)))
+             "</" tag-name ">\n")))
         (t `(lambda (my-ns tag-name) "Unknown complex type"))))
 
 
@@ -325,6 +331,14 @@
   (filter (lambda (n) (equal (node-name n) (cons :http://www\.w3\.org/2001/XMLSchema "simpleType")))
           (node-childs schema-node)))
 
+(defun xsd-complex-types (schema-node) 
+  (filter (lambda (n) (equal (node-name n) (cons :http://www\.w3\.org/2001/XMLSchema "complexType")))
+          (node-childs schema-node)))
+
+(defun xsd-elements (schema-node) 
+  (filter (lambda (n) (equal (node-name n) (cons :http://www\.w3\.org/2001/XMLSchema "element")))
+          (node-childs schema-node)))
+
 (defun xsd-simple-type-by-restriction? (simple-type-node)
   (let ((childs (node-childs simple-type-node)))
     (and (not (null childs))
@@ -334,14 +348,15 @@
   (let ((restriction (car (node-childs simple-type-node))))
     (node-attribute-value restriction "base")))
 
-(defun xsd-complex-types (schema-node) 
-  (filter (lambda (n) (equal (node-name n) (cons :http://www\.w3\.org/2001/XMLSchema "complexType")))
-          (node-childs schema-node)))
-
 (defun xsd-complex-type-with-sequence? (complex-type-node)
   (let ((childs (node-childs complex-type-node)))
     (and (not (null childs))
          (equal (node-name (car childs)) (cons :http://www\.w3\.org/2001/XMLSchema "sequence")))))
+
+(defun xsd-complex-type-with-all? (complex-type-node)
+  (let ((childs (node-childs complex-type-node)))
+    (and (not (null childs))
+         (equal (node-name (car childs)) (cons :http://www\.w3\.org/2001/XMLSchema "all")))))
 
 (defun xsd-element-with-inner-complex-type? (element-node)
   (let ((childs (node-childs element-node)))
@@ -357,9 +372,9 @@
   (let ((sequence (car (node-childs complex-type-node))))
     (node-childs sequence)))
 
-(defun xsd-elements (schema-node) 
-  (filter (lambda (n) (equal (node-name n) (cons :http://www\.w3\.org/2001/XMLSchema "element")))
-          (node-childs schema-node)))
+(defun xsd-get-all-elements (complex-type-node)
+  (let ((sequence (car (node-childs complex-type-node))))
+    (node-childs sequence)))
     
 (defun xsd-attributes (some-node) 
   (filter (lambda (n) (equal (node-name n) (cons :http://www\.w3\.org/2001/XMLSchema "attribute")))

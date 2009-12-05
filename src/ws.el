@@ -242,7 +242,7 @@
 (defun create-attribute-print-function (attribute-node)
   (let ((attribute-name (node-attribute-value attribute-node "name"))
         (attribute-type (node-attribute-value attribute-node "type")))
-    `(lambda (my-ns tag-name) 
+    `(lambda (my-ns) 
        (concat " " ,attribute-name "=\""
                (funcall (get-type my-ns ,attribute-type) nil)
                "\""))))
@@ -253,7 +253,7 @@
                  (funcall (get-type my-ns ,(node-attribute-value attribute-node "type")) nil)
                  "\""))
         ((not (null (node-attribute-value attribute-node "ref")))
-         `(funcall (get-attribute my-ns ,(node-attribute-value attribute-node "ref")) nil))
+         `(funcall (get-attribute my-ns ,(node-attribute-value attribute-node "ref"))))
         (t "Unknown attribute\n")))
 
 

@@ -8,9 +8,11 @@
           (msgs       (wsdl-get-messages nxml-tree))
           (aliases    (node-aliases nxml-tree))
           (port-types (wsdl-get-port-types nxml-tree))
+          (bindings   (wsdl-get-bindings nxml-tree))
           (schemas    (wsdl-get-embedded-schemes nxml-tree)))
       (mapc (lambda (msg-node) (define-message ns msg-node)) msgs)
       (mapc (lambda (port-type-node) (define-port-type ns port-type-node)) port-types)
+      (mapc (lambda (binding-node) (define-binding ns binding-node)) bindings)
       (mapc (lambda (alias) (add-alias! ns (car alias) (cdr alias))) aliases)
       (mapc (lambda (schema) (add-import! ns (parse-xsd-tree schema aliases))) schemas)
       ns)))
@@ -43,6 +45,7 @@
   (list (cons 'name ns-name)
         (cons 'imports    '())
         (cons 'aliases    '())
+        (cons 'bindings   '())
         (cons 'port-types '())
         (cons 'types      '())
         (cons 'elements   '())
@@ -62,6 +65,9 @@
   (if (equal alias "xmlns")
       (add-namespace-entry! namespace 'aliases (cons "" namespace-name))
     (add-namespace-entry! namespace 'aliases (cons alias namespace-name))))
+
+(defun add-binding! (namespace name port-type)
+  (add-namespace-entry! namespace 'bindings (cons name binding)))
 
 (defun add-port-type! (namespace name port-type)
   (add-namespace-entry! namespace 'port-types (cons name port-type)))
@@ -131,6 +137,9 @@
 (defun get-port-type (namespace name)
   (lookup-with-imports namespace 'port-types name))
 
+(defun get-binding (namespace name)
+  (lookup-with-imports namespace 'bindings name))
+
 ;;portTypes
 ;;---------
 (defun define-port-type (namespace port-type-node)
@@ -141,7 +150,7 @@
 (defun create-port-type-function (namespace port-type-node)
   "Create port-type function"
   (let ((port-type-name (node-attribute-value port-type-node "name")))
-    `(lambda (my-ns operation-name binding)
+    `(lambda (my-ns operation-name style)
        (cond ,@(mapcar 'create-operation-handler (wsdl-get-port-type-operations port-type-node))
              (t (error (concat "Operation " operation-name " not found in port-type " ,port-type-name)))))))
 
@@ -152,10 +161,27 @@
         `((equal operation-name ,op-name) 
           (error (concat "Operation " ,op-name " has no input")))
       `((equal operation-name ,op-name)
-        (if (equal binding "rpc")
+        (if (equal style "rpc")
             (funcall (get-message my-ns ,input-message-name) ,op-name)
           (funcall (get-message my-ns ,input-message-name) nil))))))
       
+;;bindings
+;;--------
+(defun define-binding (namespace binding-node)
+  (let ((binding (create-binding-function namespace binding-node))
+        (name (node-attribute-value binding-node "name")))
+    (add-binding! namespace name binding)))
+
+(defun create-binding-function (namespace binding-node)
+  (let ((default-style (wsdl-get-default-binding-style binding-node))
+        (port-type-name (node-attribute-value binding-node "type"))
+        (operation-names (wsdl-get-binding-operation-names binding-node)))
+    `(lambda (my-ns message &optional operation-name)
+       (cond ((equal message 'get-operation-names)
+              ',operation-names)
+             ((equal message 'get-request)
+              (funcall (get-port-type my-ns ,port-type-name) operation-name
+                       ,default-style))))))
 
 
 ;; messages
@@ -322,8 +348,12 @@
 (defun attribute-value (attribute) (cdr attribute))
 (defun node-attributes (node) (cadr node))
 (defun node-attribute-value (node attribute-name)
-  (attribute-value (car (filter (lambda (a) (equal (attribute-name a) attribute-name))
-                                (node-attributes node)))))
+  (let ((attributes (filter (lambda (a) (equal (attribute-name a) attribute-name))
+                            (node-attributes node))))
+    (if attributes 
+        (attribute-value (car attributes))
+      nil)))
+
 (defun target-namespace (node) (node-attribute-value node "targetNamespace"))
 
 (defun node-aliases (node)
@@ -363,8 +393,25 @@
 (defun wsdl-get-port-types (definitions-node) 
   (get-child-nodes-with-name definitions-node (cons :http://schemas\.xmlsoap\.org/wsdl/ "portType")))
 
+(defun wsdl-get-bindings (definitions-node) 
+  (get-child-nodes-with-name definitions-node (cons :http://schemas\.xmlsoap\.org/wsdl/ "binding")))
+
 (defun wsdl-get-port-type-operations (port-type-node) 
   (get-child-nodes-with-name port-type-node (cons :http://schemas\.xmlsoap\.org/wsdl/ "operation")))
+
+(defun wsdl-get-default-binding-style (binding-node)
+  (let ((soap:binding-list (get-child-nodes-with-name 
+                            binding-node 
+                            (cons :http://schemas\.xmlsoap\.org/wsdl/soap/ "binding"))))
+    (if soap:binding-list
+        (node-attribute-value (car soap:binding-list) "style")
+      "document")))
+
+(defun wsdl-get-binding-operation-names (binding-node) 
+  (mapcar '(lambda (operation-node) (node-attribute-value operation-node "name"))
+          (get-child-nodes-with-name
+           binding-node
+           (cons :http://schemas\.xmlsoap\.org/wsdl/ "operation"))))
 
 (defun wsdl-operation-get-input-message (operation-node)
   (let ((input-node-list (get-child-nodes-with-name 

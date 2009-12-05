@@ -318,40 +318,34 @@
 
 ;; functions to get wsdl-specific nodes:
 (defun wsdl-get-messages (definitions-node) 
-  (filter (lambda (n) (equal (node-name n) (cons :http://schemas\.xmlsoap\.org/wsdl/ "message")))
-          (node-childs definitions-node)))
+  (get-child-nodes-with-name definitions-node (cons :http://schemas\.xmlsoap\.org/wsdl/ "message")))
 
 (defun wsdl-get-message-parts (message-node)
-  (filter (lambda (n) (equal (node-name n) (cons :http://schemas\.xmlsoap\.org/wsdl/ "part")))
-          (node-childs message-node)))
+  (get-child-nodes-with-name message-node (cons :http://schemas\.xmlsoap\.org/wsdl/ "part")))
 
 (defun wsdl-get-port-types (definitions-node) 
-  (filter (lambda (n) (equal (node-name n) (cons :http://schemas\.xmlsoap\.org/wsdl/ "portType")))
-          (node-childs definitions-node)))
+  (get-child-nodes-with-name definitions-node (cons :http://schemas\.xmlsoap\.org/wsdl/ "part")))
 
 (defun wsdl-get-embedded-schemes(definitions-node)
-  (filter (lambda (n) (equal (node-name n) (cons :http://www\.w3\.org/2001/XMLSchema "schema")))
-          (node-childs 
-           (car (filter (lambda (n) (equal (node-name n) (cons :http://schemas\.xmlsoap\.org/wsdl/ "types")))
-                        (node-childs definitions-node))))))
+  (get-child-nodes-with-name 
+   (car (get-child-nodes-with-name 
+         definitions-node 
+         (cons :http://schemas\.xmlsoap\.org/wsdl/ "types")))
+   (cons :http://www\.w3\.org/2001/XMLSchema "schema")))
 
 
 ;; functions to get xsd-specific nodes:
 (defun xsd-get-simple-types (schema-node) 
-  (filter (lambda (n) (equal (node-name n) (cons :http://www\.w3\.org/2001/XMLSchema "simpleType")))
-          (node-childs schema-node)))
+  (get-child-nodes-with-name schema-node (cons :http://www\.w3\.org/2001/XMLSchema "simpleType")))
 
 (defun xsd-get-complex-types (schema-node) 
-  (filter (lambda (n) (equal (node-name n) (cons :http://www\.w3\.org/2001/XMLSchema "complexType")))
-          (node-childs schema-node)))
+  (get-child-nodes-with-name schema-node (cons :http://www\.w3\.org/2001/XMLSchema "complexType")))
 
 (defun xsd-get-elements (schema-node) 
-  (filter (lambda (n) (equal (node-name n) (cons :http://www\.w3\.org/2001/XMLSchema "element")))
-          (node-childs schema-node)))
+  (get-child-nodes-with-name schema-node (cons :http://www\.w3\.org/2001/XMLSchema "element")))
 
 (defun xsd-get-attributes (some-node) 
-  (filter (lambda (n) (equal (node-name n) (cons :http://www\.w3\.org/2001/XMLSchema "attribute")))
-          (node-childs some-node)))
+  (get-child-nodes-with-name some-node (cons :http://www\.w3\.org/2001/XMLSchema "attribute")))
 
 (defun xsd-simple-type-by-restriction? (simple-type-node)
   (let ((childs (node-childs simple-type-node)))

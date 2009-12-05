@@ -16,12 +16,12 @@
 (defun parse-xsd (path) (parse-xsd-tree (nxml-parse-file path)))
 
 (defun parse-xsd-tree (nxml-tree &optional additional-aliases)
-  (let ((ns            (create-namespace (target-namespace nxml-tree)))
-        (aliases       (node-aliases      nxml-tree))
-        (simple-types  (xsd-simple-types  nxml-tree))
-        (complex-types (xsd-complex-types nxml-tree))
+  (let ((ns            (create-namespace     (target-namespace nxml-tree)))
+        (aliases       (node-aliases          nxml-tree))
+        (simple-types  (xsd-get-simple-types  nxml-tree))
+        (complex-types (xsd-get-complex-types nxml-tree))
         (elements      (xsd-get-elements      nxml-tree))
-        (attributes    (xsd-attributes    nxml-tree)))
+        (attributes    (xsd-get-attributes    nxml-tree)))
     (mapc (lambda (alias) (add-alias! ns (car alias) (cdr alias))) (append additional-aliases aliases))
     (mapc (lambda (simple-type) (define-simple-type ns simple-type)) simple-types)
     (mapc (lambda (complex-type) (define-complex-type ns complex-type)) complex-types)
@@ -180,13 +180,13 @@
   (cond ((xsd-complex-type-with-sequence? type-node)
          `(lambda (my-ns tag-name)
             (concat
-             "<" tag-name ,@(mapcar 'invoke-attribute-print-function (xsd-attributes type-node)) ">\n"
+             "<" tag-name ,@(mapcar 'invoke-attribute-print-function (xsd-get-attributes type-node)) ">\n"
              ,@(mapcar 'create-local-element-print-function (xsd-get-sequence-elements type-node))
              "</" tag-name ">\n")))
         ((xsd-complex-type-with-all? type-node)
          `(lambda (my-ns tag-name)
             (concat
-             "<" tag-name ,@(mapcar 'invoke-attribute-print-function (xsd-attributes type-node)) ">\n"
+             "<" tag-name ,@(mapcar 'invoke-attribute-print-function (xsd-get-attributes type-node)) ">\n"
              ,@(mapcar 'create-local-element-print-function (reverse (xsd-get-all-elements type-node)))
              "</" tag-name ">\n")))
         (t `(lambda (my-ns tag-name) "Unknown complex type"))))
@@ -316,9 +316,11 @@
 (defun wsdl-messages (definitions-node) 
   (filter (lambda (n) (equal (node-name n) (cons :http://schemas\.xmlsoap\.org/wsdl/ "message")))
           (node-childs definitions-node)))
+
 (defun wsdl-message-parts (message-node)
   (filter (lambda (n) (equal (node-name n) (cons :http://schemas\.xmlsoap\.org/wsdl/ "part")))
           (node-childs message-node)))
+
 (defun wsdl-embedded-schemes (definitions-node)
   (filter (lambda (n) (equal (node-name n) (cons :http://www\.w3\.org/2001/XMLSchema "schema")))
           (node-childs 
@@ -327,11 +329,11 @@
 
 
 ;; functions to get xsd-specific nodes:
-(defun xsd-simple-types (schema-node) 
+(defun xsd-get-simple-types (schema-node) 
   (filter (lambda (n) (equal (node-name n) (cons :http://www\.w3\.org/2001/XMLSchema "simpleType")))
           (node-childs schema-node)))
 
-(defun xsd-complex-types (schema-node) 
+(defun xsd-get-complex-types (schema-node) 
   (filter (lambda (n) (equal (node-name n) (cons :http://www\.w3\.org/2001/XMLSchema "complexType")))
           (node-childs schema-node)))
 
@@ -339,7 +341,7 @@
   (filter (lambda (n) (equal (node-name n) (cons :http://www\.w3\.org/2001/XMLSchema "element")))
           (node-childs schema-node)))
 
-(defun xsd-attributes (some-node) 
+(defun xsd-get-attributes (some-node) 
   (filter (lambda (n) (equal (node-name n) (cons :http://www\.w3\.org/2001/XMLSchema "attribute")))
           (node-childs some-node)))
 

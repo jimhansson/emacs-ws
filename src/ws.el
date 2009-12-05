@@ -20,7 +20,7 @@
         (aliases       (node-aliases      nxml-tree))
         (simple-types  (xsd-simple-types  nxml-tree))
         (complex-types (xsd-complex-types nxml-tree))
-        (elements      (xsd-elements      nxml-tree))
+        (elements      (xsd-get-elements      nxml-tree))
         (attributes    (xsd-attributes    nxml-tree)))
     (mapc (lambda (alias) (add-alias! ns (car alias) (cdr alias))) (append additional-aliases aliases))
     (mapc (lambda (simple-type) (define-simple-type ns simple-type)) simple-types)
@@ -335,9 +335,13 @@
   (filter (lambda (n) (equal (node-name n) (cons :http://www\.w3\.org/2001/XMLSchema "complexType")))
           (node-childs schema-node)))
 
-(defun xsd-elements (schema-node) 
+(defun xsd-get-elements (schema-node) 
   (filter (lambda (n) (equal (node-name n) (cons :http://www\.w3\.org/2001/XMLSchema "element")))
           (node-childs schema-node)))
+
+(defun xsd-attributes (some-node) 
+  (filter (lambda (n) (equal (node-name n) (cons :http://www\.w3\.org/2001/XMLSchema "attribute")))
+          (node-childs some-node)))
 
 (defun xsd-simple-type-by-restriction? (simple-type-node)
   (let ((childs (node-childs simple-type-node)))
@@ -374,11 +378,7 @@
 
 (defun xsd-get-all-elements (complex-type-node)
   (let ((sequence (car (node-childs complex-type-node))))
-    (node-childs sequence)))
-    
-(defun xsd-attributes (some-node) 
-  (filter (lambda (n) (equal (node-name n) (cons :http://www\.w3\.org/2001/XMLSchema "attribute")))
-          (node-childs some-node)))
+    (node-childs sequence)))    
 
 (defun filter (predicat items)
   (defun iter (its)

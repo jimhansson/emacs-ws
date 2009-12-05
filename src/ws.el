@@ -4,11 +4,13 @@
 
 (defun parse-wsdl (path)
   (let ((nxml-tree (nxml-parse-file path)))
-    (let ((ns (create-namespace (target-namespace nxml-tree)))
-          (msgs (wsdl-get-messages nxml-tree))
-          (aliases (node-aliases nxml-tree))
-          (schemas (wsdl-get-embedded-schemes nxml-tree)))
+    (let ((ns         (create-namespace (target-namespace nxml-tree)))
+          (msgs       (wsdl-get-messages nxml-tree))
+          (aliases    (node-aliases nxml-tree))
+          (port-types (wsdl-get-port-types nxml-tree))
+          (schemas    (wsdl-get-embedded-schemes nxml-tree)))
       (mapc (lambda (msg-node) (define-message ns msg-node)) msgs)
+      (mapc (lambda (port-type-node) (define-port-type ns port-type-node)) port-types)
       (mapc (lambda (alias) (add-alias! ns (car alias) (cdr alias))) aliases)
       (mapc (lambda (schema) (add-import! ns (parse-xsd-tree schema aliases))) schemas)
       ns)))
@@ -126,13 +128,34 @@
 (defun get-attribute (namespace name)
   (lookup-with-imports namespace 'attributes name))
 
+(defun get-port-type (namespace name)
+  (lookup-with-imports namespace 'port-types name))
 
 ;;portTypes
 ;;---------
 (defun define-port-type (namespace port-type-node)
-  (let ((port-type (create-port-type-print-function namespace port-type-node))
+  (let ((port-type (create-port-type-function namespace port-type-node))
         (name (node-attribute-value port-type-node "name")))
     (add-port-type! namespace name port-type)))
+
+(defun create-port-type-function (namespace port-type-node)
+  "Create port-type function"
+  (let ((port-type-name (node-attribute-value port-type-node "name")))
+    `(lambda (my-ns operation-name binding)
+       (cond ,@(mapcar 'create-operation-handler (wsdl-get-port-type-operations port-type-node))
+             (t (error (concat "Operation " operation-name " not found in port-type " ,port-type-name)))))))
+
+(defun create-operation-handler (operation-node)
+  (let ((op-name (node-attribute-value operation-node "name"))
+        (input-message-name (wsdl-operation-get-input-message operation-node)))
+    (if (null input-message-name)
+        `((equal operation-name ,op-name) 
+          (error (concat "Operation " ,op-name " has no input")))
+      `((equal operation-name ,op-name)
+        (if (equal binding "rpc")
+            (funcall (get-message my-ns ,input-message-name) ,op-name)
+          (funcall (get-message my-ns ,input-message-name) nil))))))
+      
 
 
 ;; messages
@@ -145,16 +168,20 @@
 (defun create-message-print-function (namespace message-node)
   "Create function that print message"
   `(lambda (my-ns tag-name)
-     (concat "<"  tag-name ">\n"
-             ,@(mapcar 'print-message-part (wsdl-get-message-parts message-node))
-             "</" tag-name ">\n")))
+     (if tag-name
+         (concat "<"  tag-name ">\n"
+                 ,@(mapcar 'print-message-part (wsdl-get-message-parts message-node))
+                 "</" tag-name ">\n")
+       (concat ,@(mapcar 'print-message-part (wsdl-get-message-parts message-node))))))
 
 (defun print-message-part (message-part-node)
   (let ((part-name (node-attribute-value message-part-node "name"))
         (type? (not (null (node-attribute-value message-part-node "type")))))
-    (if type?
-        `(funcall (get-type  my-ns ,(node-attribute-value message-part-node "type")) ,part-name)
-      `(funcall (get-element my-ns ,(node-attribute-value message-part-node "element")) ,part-name))))
+    (if type?        
+        `(funcall (get-type  my-ns ,(node-attribute-value message-part-node "type")) 
+                  (if tag-name ,part-name nil))
+      `(funcall (get-element my-ns ,(node-attribute-value message-part-node "element")) 
+                (if tag-name ,part-name nil)))))
 
 
 ;; types
@@ -223,12 +250,12 @@
            `(lambda (my-ns tag-name)
               (funcall (create-complex-type-print-function ',(car (node-childs element-node)))
                      my-ns
-                     ,(node-attribute-value element-node "name"))))
+                     (or tag-name ,element-name))))
           ((xsd-element-with-inner-simple-type? element-node)
            `(lambda (my-ns tag-name)
               (funcall (create-simple-type-print-function ',(car (node-childs element-node)))
                      my-ns
-                     ,(node-attribute-value element-node "name"))))
+                     (or tag-name ,element-name))))
           (t `(lambda (my-ns tag-name) "Unknown element\n")))))
 
 (defun create-local-element-print-function (element-node)
@@ -335,6 +362,17 @@
 
 (defun wsdl-get-port-types (definitions-node) 
   (get-child-nodes-with-name definitions-node (cons :http://schemas\.xmlsoap\.org/wsdl/ "portType")))
+
+(defun wsdl-get-port-type-operations (port-type-node) 
+  (get-child-nodes-with-name port-type-node (cons :http://schemas\.xmlsoap\.org/wsdl/ "operation")))
+
+(defun wsdl-operation-get-input-message (operation-node)
+  (let ((input-node-list (get-child-nodes-with-name 
+                          operation-node 
+                          (cons :http://schemas\.xmlsoap\.org/wsdl/ "input"))))
+    (if input-node-list
+        (node-attribute-value (car input-node-list) "message")
+      nil)))
 
 (defun wsdl-get-embedded-schemes(definitions-node)
   (get-child-nodes-with-name 

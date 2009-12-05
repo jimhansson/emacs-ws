@@ -41,6 +41,7 @@
   (list (cons 'name ns-name)
         (cons 'imports    '())
         (cons 'aliases    '())
+        (cons 'port-types '())
         (cons 'types      '())
         (cons 'elements   '())
         (cons 'attributes '())
@@ -59,6 +60,9 @@
   (if (equal alias "xmlns")
       (add-namespace-entry! namespace 'aliases (cons "" namespace-name))
     (add-namespace-entry! namespace 'aliases (cons alias namespace-name))))
+
+(defun add-port-type! (namespace name port-type)
+  (add-namespace-entry! namespace 'port-types (cons name port-type)))
 
 (defun add-message! (namespace name message)
   (add-namespace-entry! namespace 'messages (cons name message)))
@@ -89,8 +93,6 @@
 (defun get-imported-namespace-by-alias (namespace alias)
   (let ((imported-namespace-name (expand-alias namespace alias)))
     (get-imported-namespace-by-name namespace imported-namespace-name)))
-
-;(defun get-all-messages (namespace) (cdr (assoc 'messages namespace)))
 
 (defun lookup (namespace entries-key name)
   "Lookup entry in this namespace definitions only"
@@ -123,6 +125,14 @@
 
 (defun get-attribute (namespace name)
   (lookup-with-imports namespace 'attributes name))
+
+
+;;portTypes
+;;---------
+(defun define-port-type (namespace port-type-node)
+  (let ((port-type (create-port-type-print-function namespace port-type-node))
+        (name (node-attribute-value port-type-node "name")))
+    (add-port-type! namespace name port-type)))
 
 
 ;; messages
@@ -324,7 +334,7 @@
   (get-child-nodes-with-name message-node (cons :http://schemas\.xmlsoap\.org/wsdl/ "part")))
 
 (defun wsdl-get-port-types (definitions-node) 
-  (get-child-nodes-with-name definitions-node (cons :http://schemas\.xmlsoap\.org/wsdl/ "part")))
+  (get-child-nodes-with-name definitions-node (cons :http://schemas\.xmlsoap\.org/wsdl/ "portType")))
 
 (defun wsdl-get-embedded-schemes(definitions-node)
   (get-child-nodes-with-name 

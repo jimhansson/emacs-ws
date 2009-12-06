@@ -8,7 +8,8 @@
     (cond ((equal (length services) 0)
            (error "No services found"))
           ((equal (length services) 1)
-           (create-soap-request-for-service wsdl-ns (car services))))))
+           (create-soap-request-for-service wsdl-ns (car services)))
+          (t (create-soap-request-for-service wsdl-ns (select-with-ido services "Select service: "))))))
 
 (defun create-soap-request-for-service (wsdl-ns service-name)
   (let* ((service (get-service wsdl-ns service-name))
@@ -16,7 +17,8 @@
     (cond ((equal (length ports) 0)
            (error (concat "No ports found in service " service-name)))
           ((equal (length ports) 1)
-           (create-soap-request-for-port wsdl-ns service (car ports))))))
+           (create-soap-request-for-port wsdl-ns service (car ports)))
+          (t (create-soap-request-for-port wsdl-ns service (select-with-ido ports "Select port: "))))))
 
 (defun create-soap-request-for-port (wsdl-ns service port-name)
   (let* ((location (funcall service 'get-port-location port-name))
@@ -25,7 +27,12 @@
     (cond ((equal (length operations) 0)
            (error (concat "No operations found for port " port-name)))
           ((equal (length operations) 1)
-           (create-soap-request-for-binding wsdl-ns binding (car operations) location)))))
+           (create-soap-request-for-binding wsdl-ns binding (car operations) location))
+          (t (create-soap-request-for-binding 
+              wsdl-ns
+              binding 
+              (select-with-ido operations "Select operation: ")
+              location)))))
 
 (defun create-soap-request-for-binding (wsdl-ns binding operation-name location)
   (cons location (funcall binding 'get-request operation-name)))
@@ -595,5 +602,15 @@
         (iter (cdr its)))))
   (iter items))
 
+(defun select-with-ido (choises prompt)
+  "Select item from object-list presented at minibuffer using ido."
+  (let* ((ido-decorations (list "\n"  ""
+                                "\n"  " | ..." 
+                                "\n[" "]" 
+                                " [No match]"
+                                " [Matched]"
+                                " [Not readable]"
+                                " [Too big]")))
+    (ido-completing-read prompt choises nil t)))
 
 (provide 'ws)

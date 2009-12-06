@@ -18,6 +18,7 @@
          (url-request-data   request)
          (buf (get-buffer-create (concat service-location "-request"))))
     (switch-to-buffer buf)
+    (delete-region (point-min) (point-max))
     (insert request)
     (nxml-mode)
     (indent-region (point-min) (point-max))
@@ -252,19 +253,21 @@
 ;;-------
 (defun define-wsdl-import (namespace import-node base-url)
   (let* ((import-ns (node-attribute-value import-node "namespace"))
-         (import-location (node-attribute-value import-node "location"))
-         (resolved-url (resolve-url import-location base-url)))
-    (add-import! namespace (parse-wsdl-tree 
-                            (get-nxml-tree-for resolved-url)
-                            resolved-url))))
+         (import-location (node-attribute-value import-node "location")))
+    (if import-location
+        (let ((resolved-url (resolve-url import-location base-url)))
+          (add-import! namespace (parse-wsdl-tree 
+                                  (get-nxml-tree-for resolved-url)
+                                  resolved-url))))))
 
 (defun define-xsd-import (namespace import-node base-url)
   (let* ((import-ns (node-attribute-value import-node "namespace"))
-         (import-location (node-attribute-value import-node "schemaLocation"))
-         (resolved-url (resolve-url import-location base-url)))
-    (add-import! namespace (parse-xsd-tree
-                            (get-nxml-tree-for resolved-url)
-                            resolved-url))))
+         (import-location (node-attribute-value import-node "schemaLocation")))
+    (if import-location
+        (let ((resolved-url (resolve-url import-location base-url)))
+          (add-import! namespace (parse-xsd-tree
+                                  (get-nxml-tree-for resolved-url)
+                                  resolved-url))))))
 
 ;;portTypes
 ;;---------

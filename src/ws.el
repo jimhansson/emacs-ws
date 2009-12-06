@@ -9,10 +9,12 @@
           (aliases    (node-aliases nxml-tree))
           (port-types (wsdl-get-port-types nxml-tree))
           (bindings   (wsdl-get-bindings nxml-tree))
+          (services   (wsdl-get-services nxml-tree))
           (schemas    (wsdl-get-embedded-schemes nxml-tree)))
       (mapc (lambda (msg-node) (define-message ns msg-node)) msgs)
       (mapc (lambda (port-type-node) (define-port-type ns port-type-node)) port-types)
       (mapc (lambda (binding-node) (define-binding ns binding-node)) bindings)
+      (mapc (lambda (service-node) (define-service ns service-node)) services)
       (mapc (lambda (alias) (add-alias! ns (car alias) (cdr alias))) aliases)
       (mapc (lambda (schema) (add-import! ns (parse-xsd-tree schema aliases))) schemas)
       ns)))
@@ -45,6 +47,7 @@
   (list (cons 'name ns-name)
         (cons 'imports    '())
         (cons 'aliases    '())
+        (cons 'services   '())
         (cons 'bindings   '())
         (cons 'port-types '())
         (cons 'types      '())
@@ -66,7 +69,10 @@
       (add-namespace-entry! namespace 'aliases (cons "" namespace-name))
     (add-namespace-entry! namespace 'aliases (cons alias namespace-name))))
 
-(defun add-binding! (namespace name port-type)
+(defun add-service! (namespace name service)
+  (add-namespace-entry! namespace 'services (cons name service)))
+
+(defun add-binding! (namespace name binding)
   (add-namespace-entry! namespace 'bindings (cons name binding)))
 
 (defun add-port-type! (namespace name port-type)
@@ -140,6 +146,9 @@
 (defun get-binding (namespace name)
   (lookup-with-imports namespace 'bindings name))
 
+(defun get-service (namespace name)
+  (lookup-with-imports namespace 'services name))
+
 ;;portTypes
 ;;---------
 (defun define-port-type (namespace port-type-node)
@@ -183,6 +192,24 @@
               (funcall (get-port-type my-ns ,port-type-name) operation-name
                        ,default-style))))))
 
+;;services
+;;--------
+(defun define-service (namespace service-node)
+  (let ((service (create-service-function namespace service-node))
+        (name (node-attribute-value service-node "name")))
+    (add-service! namespace name service)))
+
+(defun create-service-function (namespace service-node)
+  (let ((port-names (wsdl-get-service-port-names service-node))
+        (port-locations (wsdl-get-service-port-locations-alist service-node))
+        (port->binding (wsdl-get-service-port-binding-alist service-node)))
+    `(lambda (my-ns message &optional port-name)
+       (cond ((equal message 'get-port-names)
+              ',port-names)
+             ((equal message 'get-port-location)
+              (and (assoc port-name ',port-locations) (cdr (assoc port-name ',port-locations))))
+             ((equal message 'get-binding)
+              (and (assoc port-name ',port->binding) (get-binding my-ns (cdr (assoc port-name ',port->binding)))))))))
 
 ;; messages
 ;;---------
@@ -354,6 +381,18 @@
         (attribute-value (car attributes))
       nil)))
 
+(defun parse-xml-from-location (location)
+  (let ((buf (url-retrieve-synchronously location))
+        (tmp-filename (make-temp-file "soap-request-builder")))
+    (set-buffer buf)
+    (xml/delete-http-header)
+    (set-visited-file-name tmp-filename t)
+    (save-buffer)
+    (kill-buffer buf)
+    (let ((result (nxml-parse-file tmp-filename)))
+      (delete-file tmp-filename)
+      result)))
+
 (defun target-namespace (node) (node-attribute-value node "targetNamespace"))
 
 (defun node-aliases (node)
@@ -396,6 +435,12 @@
 (defun wsdl-get-bindings (definitions-node) 
   (get-child-nodes-with-name definitions-node (cons :http://schemas\.xmlsoap\.org/wsdl/ "binding")))
 
+(defun wsdl-get-services (definitions-node) 
+  (get-child-nodes-with-name definitions-node (cons :http://schemas\.xmlsoap\.org/wsdl/ "service")))
+
+(defun wsdl-get-ports (service-node) 
+  (get-child-nodes-with-name service-node (cons :http://schemas\.xmlsoap\.org/wsdl/ "port")))
+
 (defun wsdl-get-port-type-operations (port-type-node) 
   (get-child-nodes-with-name port-type-node (cons :http://schemas\.xmlsoap\.org/wsdl/ "operation")))
 
@@ -412,6 +457,35 @@
           (get-child-nodes-with-name
            binding-node
            (cons :http://schemas\.xmlsoap\.org/wsdl/ "operation"))))
+
+(defun wsdl-get-service-port-names (service-node) 
+  (mapcar '(lambda (port-node) (node-attribute-value port-node "name"))
+          (get-child-nodes-with-name
+           service-node
+           (cons :http://schemas\.xmlsoap\.org/wsdl/ "port"))))
+
+(defun wsdl-get-service-port-locations-alist (service-node) 
+  (filter (lambda (n) (not (null n)))
+          (mapcar '(lambda (port-node) 
+                     (let ((soap:address-list (get-child-nodes-with-name
+                                               port-node
+                                               (cons :http://schemas\.xmlsoap\.org/wsdl/soap/ "address"))))
+                       (if soap:address-list
+                           (cons (node-attribute-value port-node "name")
+                                 (node-attribute-value (car soap:address-list) "location"))
+                         nil)))
+                  (get-child-nodes-with-name
+                   service-node
+                   (cons :http://schemas\.xmlsoap\.org/wsdl/ "port")))))
+
+(defun wsdl-get-service-port-binding-alist (service-node) 
+  (filter (lambda (n) (not (null n)))
+          (mapcar '(lambda (port-node) 
+                     (cons (node-attribute-value port-node "name")
+                           (node-attribute-value port-node "binding")))
+                  (get-child-nodes-with-name
+                   service-node
+                   (cons :http://schemas\.xmlsoap\.org/wsdl/ "port")))))
 
 (defun wsdl-operation-get-input-message (operation-node)
   (let ((input-node-list (get-child-nodes-with-name 

@@ -244,12 +244,14 @@
     (add-binding! namespace name binding)))
 
 (defun create-binding-function (namespace binding-node)
-  (let ((default-style (wsdl-get-default-binding-style binding-node))
-        (port-type-name (node-attribute-value binding-node "type"))
-        (operation-names (wsdl-get-binding-operation-names binding-node)))
+  (let ((default-style     (wsdl-get-default-binding-style binding-node))
+        (soap-action-alist (wsdl-get-soap-actions-alist binding-node))
+        (port-type-name    (node-attribute-value binding-node "type"))
+        (operation-names   (wsdl-get-binding-operation-names binding-node)))
     `(lambda (my-ns message &optional operation-name)
-       (cond ((equal message 'get-operation-names)
-              ',operation-names)
+       (cond ((equal message 'get-operation-names) ',operation-names)
+             ((equal message 'get-soap-action) 
+              (and (assoc operation-name ',soap-action-alist) (cdr (assoc operation-name ',soap-action-alist))))
              ((equal message 'get-request)
               (concat "<soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\">\n" 
                       "<soapenv:Body>\n"
@@ -563,6 +565,20 @@
     (if soap:binding-list
         (node-attribute-value (car soap:binding-list) "style")
       "document")))
+
+(defun wsdl-get-soap-actions-alist (binding-node)
+  (filter (lambda (n) (not (null n)))
+          (mapcar '(lambda (operation-node) 
+                     (let ((soap:operation-list (get-child-nodes-with-name
+                                                 operation-node
+                                                 (cons :http://schemas\.xmlsoap\.org/wsdl/soap/ "operation"))))
+                       (if soap:operation-list
+                           (cons (node-attribute-value operation-node "name")
+                                 (node-attribute-value (car soap:operation-list) "soapAction"))
+                         nil)))
+                  (get-child-nodes-with-name
+                   binding-node
+                   (cons :http://schemas\.xmlsoap\.org/wsdl/ "operation")))))
 
 (defun wsdl-get-binding-operation-names (binding-node) 
   (mapcar '(lambda (operation-node) (node-attribute-value operation-node "name"))

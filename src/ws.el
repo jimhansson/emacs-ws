@@ -56,7 +56,7 @@
         (services   (wsdl-get-services nxml-tree))
         (schemas    (wsdl-get-embedded-schemes nxml-tree))
         (imports    (wsdl-get-imports nxml-tree)))
-    (mapc (lambda (import-node) (define-import ns import-node location)) imports)
+    (mapc (lambda (import-node) (define-wsdl-import ns import-node location)) imports)
     (mapc (lambda (msg-node) (define-message ns msg-node)) msgs)
     (mapc (lambda (port-type-node) (define-port-type ns port-type-node)) port-types)
     (mapc (lambda (binding-node) (define-binding ns binding-node)) bindings)
@@ -75,7 +75,7 @@
         (elements      (xsd-get-elements      nxml-tree))
         (attributes    (xsd-get-attributes    nxml-tree))
         (imports       (xsd-get-imports       nxml-tree)))
-    (mapc (lambda (import-node) (define-import ns import-node location)) imports)
+    (mapc (lambda (import-node) (define-xsd-import ns import-node location)) imports)
     (mapc (lambda (alias) (add-alias! ns (car alias) (cdr alias))) (append additional-aliases aliases))
     (mapc (lambda (simple-type) (define-simple-type ns simple-type)) simple-types)
     (mapc (lambda (complex-type) (define-complex-type ns complex-type)) complex-types)
@@ -174,7 +174,10 @@
         (let* ((prefix (get-prefix name))
                (imported-ns (get-imported-namespace-by-alias namespace prefix)))
           (if (null imported-ns)
-              nil
+              (let ((inner-scheme (get-imported-namespace-by-alias namespace nil)))
+                (if inner-scheme
+                    (lookup-with-imports inner-scheme entries-key name)
+                  nil))
             (lookup imported-ns entries-key name)))
       this-namespace-entry)))
 
@@ -205,11 +208,19 @@
 
 ;;imports
 ;;-------
-(defun define-import (namespace import-node base-url)
+(defun define-wsdl-import (namespace import-node base-url)
   (let* ((import-ns (node-attribute-value import-node "namespace"))
          (import-location (node-attribute-value import-node "location"))
          (resolved-url (resolve-url import-location base-url)))
     (add-import! namespace (parse-wsdl-tree 
+                            (get-nxml-tree-for resolved-url)
+                            resolved-url))))
+
+(defun define-xsd-import (namespace import-node base-url)
+  (let* ((import-ns (node-attribute-value import-node "namespace"))
+         (import-location (node-attribute-value import-node "schemaLocation"))
+         (resolved-url (resolve-url import-location base-url)))
+    (add-import! namespace (parse-xsd-tree
                             (get-nxml-tree-for resolved-url)
                             resolved-url))))
 

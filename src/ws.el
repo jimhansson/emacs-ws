@@ -18,7 +18,7 @@
          (url-request-data   request)
          (buf (get-buffer-create (concat service-location "-request"))))
     (switch-to-buffer buf)
-    (insert request-text)
+    (insert request)
     (nxml-mode)
     (indent-region (point-min) (point-max))
 
@@ -361,8 +361,7 @@
                   (if tag-name ,part-name nil) 
                   nil)
       `(funcall (get-element my-ns ,(node-attribute-value message-part-node "element")) 
-                (if tag-name ,part-name nil) 
-                nil))))
+                (if tag-name ,part-name nil)))))
 
 
 ;; types
@@ -386,7 +385,7 @@
   (cond ((xsd-simple-type-by-restriction? type-node)
          `(lambda (my-ns tag-name xmlns) 
             (funcall (get-type my-ns ,(xsd-get-restriction-base-type type-node)) tag-name xmlns)))
-        (t `(lambda (my-ns tag-name) 
+        (t `(lambda (my-ns tag-name xmlns) 
               (cons tag-name "Simple type not by restriction, unsupported yet")))))
 
 (defun define-complex-type (namespace type-node)

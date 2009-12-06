@@ -251,8 +251,12 @@
        (cond ((equal message 'get-operation-names)
               ',operation-names)
              ((equal message 'get-request)
-              (funcall (get-port-type my-ns ,port-type-name) operation-name
-                       ,default-style))))))
+              (concat "<soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\">\n" 
+                      "<soapenv:Body>\n"
+                      (funcall (get-port-type my-ns ,port-type-name) operation-name
+                               ,default-style)
+                      "</soapenv:Body>\n"
+                      "</soapenv:Envelope>"))))))
 
 ;;services
 ;;--------

@@ -52,7 +52,9 @@
         (port-types (wsdl-get-port-types nxml-tree))
         (bindings   (wsdl-get-bindings nxml-tree))
         (services   (wsdl-get-services nxml-tree))
-        (schemas    (wsdl-get-embedded-schemes nxml-tree)))
+        (schemas    (wsdl-get-embedded-schemes nxml-tree))
+        (imports    (wsdl-get-imports nxml-tree)))
+    (mapc (lambda (import-node) (define-import ns import-node location)) imports)
     (mapc (lambda (msg-node) (define-message ns msg-node)) msgs)
     (mapc (lambda (port-type-node) (define-port-type ns port-type-node)) port-types)
     (mapc (lambda (binding-node) (define-binding ns binding-node)) bindings)
@@ -69,7 +71,9 @@
         (simple-types  (xsd-get-simple-types  nxml-tree))
         (complex-types (xsd-get-complex-types nxml-tree))
         (elements      (xsd-get-elements      nxml-tree))
-        (attributes    (xsd-get-attributes    nxml-tree)))
+        (attributes    (xsd-get-attributes    nxml-tree))
+        (imports       (xsd-get-imports       nxml-tree)))
+    (mapc (lambda (import-node) (define-import ns import-node location)) imports)
     (mapc (lambda (alias) (add-alias! ns (car alias) (cdr alias))) (append additional-aliases aliases))
     (mapc (lambda (simple-type) (define-simple-type ns simple-type)) simple-types)
     (mapc (lambda (complex-type) (define-complex-type ns complex-type)) complex-types)
@@ -196,6 +200,16 @@
 (defun get-service-names (namespace)
   (let ((services (cdr (assoc 'services namespace))))
     (mapcar 'car services)))
+
+;;imports
+;;-------
+(defun define-import (namespace import-node base-url)
+  (let* ((import-ns (node-attribute-value import-node "namespace"))
+         (import-location (node-attribute-value import-node "location"))
+         (resolved-url (resolve-url import-location base-url)))
+    (add-import! namespace (parse-wsdl-tree 
+                            (get-nxml-tree-for resolved-url)
+                            resolved-url))))
 
 ;;portTypes
 ;;---------
@@ -535,6 +549,9 @@
 (defun wsdl-get-port-type-operations (port-type-node) 
   (get-child-nodes-with-name port-type-node (cons :http://schemas\.xmlsoap\.org/wsdl/ "operation")))
 
+(defun wsdl-get-imports (definitions-node) 
+  (get-child-nodes-with-name definitions-node (cons :http://schemas\.xmlsoap\.org/wsdl/ "import")))
+
 (defun wsdl-get-default-binding-style (binding-node)
   (let ((soap:binding-list (get-child-nodes-with-name 
                             binding-node 
@@ -606,6 +623,9 @@
 
 (defun xsd-get-attributes (some-node) 
   (get-child-nodes-with-name some-node (cons :http://www\.w3\.org/2001/XMLSchema "attribute")))
+
+(defun xsd-get-imports (schema-node) 
+  (get-child-nodes-with-name schema-node (cons :http://www\.w3\.org/2001/XMLSchema "import")))
 
 (defun xsd-simple-type-by-restriction? (simple-type-node)
   (let ((childs (node-childs simple-type-node)))

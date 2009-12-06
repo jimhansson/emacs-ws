@@ -1,6 +1,8 @@
 (require 'nxml-parse)
 (require 'nxml-util)
 (require 'cl)
+(require 'ido)
+(require 'url)
 
 (defun create-soap-request (wsdl-nxml-tree)
   (let* ((wsdl-ns (parse-wsdl-tree wsdl-nxml-tree))
@@ -460,6 +462,37 @@
 (defun get-child-nodes-with-name (parent-node name) 
   (filter (lambda (n) (equal (node-name n) name))
           (node-childs parent-node)))
+
+(defun get-nxml-tree-for (location)
+  (let ((url (url-generic-parse-url location)))
+    (if (or (equal (elt url 1) "http")
+            (equal (elt url 1) "https")
+            (equal (elt url 1) "ftp")
+            (equal (elt url 1) "file"))
+        ;;this is valid url
+        (get-nxml-tree-for-url location)
+      ;;this is local file path 
+      (nxml-parse-file (expand-file-name location)))))
+
+(defun get-nxml-tree-for-url (url)
+  (let ((buf (url-retrieve-synchronously url))
+        (tmp-filename (make-temp-file "soap-request-builder")))
+    (set-buffer buf)
+    (delete-http-headers)
+    (set-visited-file-name tmp-filename t)
+    (save-buffer)
+    (kill-buffer buf)
+    (let ((nxml-tree (nxml-parse-file tmp-filename)))
+      (delete-file tmp-filename)
+      nxml-tree)))
+
+(defun delete-http-headers ()
+  "Delete http headers from current buffer"
+  (goto-char (point-min))
+  (if (looking-at "^<\\?xml")
+      'done
+    (kill-line)
+    (delete-http-headers)))
 
 
 ;; functions to get wsdl-specific nodes:

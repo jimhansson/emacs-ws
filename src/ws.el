@@ -2,6 +2,34 @@
 (require 'nxml-util)
 (require 'cl)
 
+(defun create-soap-request (wsdl-nxml-tree)
+  (let* ((wsdl-ns (parse-wsdl-tree wsdl-nxml-tree))
+         (services (get-service-names wsdl-ns)))
+    (cond ((equal (length services) 0)
+           (error "No services found"))
+          ((equal (length services) 1)
+           (create-soap-request-for-service wsdl-ns (car services))))))
+
+(defun create-soap-request-for-service (wsdl-ns service-name)
+  (let* ((service (get-service wsdl-ns service-name))
+         (ports (funcall service 'get-port-names)))
+    (cond ((equal (length ports) 0)
+           (error (concat "No ports found in service " service-name)))
+          ((equal (length ports) 1)
+           (create-soap-request-for-port wsdl-ns service (car ports))))))
+
+(defun create-soap-request-for-port (wsdl-ns service port-name)
+  (let* ((location (funcall service 'get-port-location port-name))
+         (binding (funcall service 'get-binding port-name))
+         (operations (funcall binding 'get-operation-names)))
+    (cond ((equal (length operations) 0)
+           (error (concat "No operations found for port " port-name)))
+          ((equal (length operations) 1)
+           (create-soap-request-for-binding wsdl-ns binding (car operations) location)))))
+
+(defun create-soap-request-for-binding (wsdl-ns binding operation-name location)
+  (cons location (funcall binding 'get-request operation-name)))
+
 (defun parse-wsdl (path) (parse-wsdl-tree (nxml-parse-file path)))
 
 (defun parse-wsdl-tree (nxml-tree)
@@ -149,6 +177,10 @@
 
 (defun get-service (namespace name)
   (lookup-with-imports namespace 'services name))
+
+(defun get-service-names (namespace)
+  (let ((services (cdr (assoc 'services namespace))))
+    (mapcar 'car services)))
 
 ;;portTypes
 ;;---------

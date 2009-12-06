@@ -235,10 +235,13 @@
   "Create port-type function"
   (let ((port-type-name (node-attribute-value port-type-node "name")))
     `(lambda (my-ns operation-name style)
-       (cond ,@(mapcar 'create-operation-handler (wsdl-get-port-type-operations port-type-node))
+       (cond ,@(mapcar 
+                '(lambda (op-node)
+                   (create-operation-handler op-node (namespace-name namespace)))
+                (wsdl-get-port-type-operations port-type-node))
              (t (error (concat "Operation " operation-name " not found in port-type " ,port-type-name)))))))
 
-(defun create-operation-handler (operation-node)
+(defun create-operation-handler (operation-node operation-namespace-name)
   (let ((op-name (node-attribute-value operation-node "name"))
         (input-message-name (wsdl-operation-get-input-message operation-node)))
     (if (null input-message-name)
@@ -246,8 +249,8 @@
           (error (concat "Operation " ,op-name " has no input")))
       `((equal operation-name ,op-name)
         (if (equal style "rpc")
-            (funcall (get-message my-ns ,input-message-name) ,op-name)
-          (funcall (get-message my-ns ,input-message-name) nil))))))
+            (funcall (get-message my-ns ,input-message-name) ,op-name ,operation-namespace-name)
+          (funcall (get-message my-ns ,input-message-name) nil nil))))))
       
 ;;bindings
 ;;--------
@@ -301,9 +304,9 @@
 
 (defun create-message-print-function (namespace message-node)
   "Create function that print message"
-  `(lambda (my-ns tag-name)
+  `(lambda (my-ns tag-name xmlns)
      (if tag-name
-         (concat "<"  tag-name ">\n"
+         (concat "<"  tag-name " xmlns=\"" xmlns "\">\n"
                  ,@(mapcar 'print-message-part (wsdl-get-message-parts message-node))
                  "</" tag-name ">\n")
        (concat ,@(mapcar 'print-message-part (wsdl-get-message-parts message-node))))))
@@ -313,9 +316,11 @@
         (type? (not (null (node-attribute-value message-part-node "type")))))
     (if type?        
         `(funcall (get-type  my-ns ,(node-attribute-value message-part-node "type")) 
-                  (if tag-name ,part-name nil))
+                  (if tag-name ,part-name nil) 
+                  nil)
       `(funcall (get-element my-ns ,(node-attribute-value message-part-node "element")) 
-                (if tag-name ,part-name nil)))))
+                (if tag-name ,part-name nil) 
+                nil))))
 
 
 ;; types
@@ -325,9 +330,9 @@
     (add-type! namespace type-name type)))
 
 (defun create-build-in-type-print-function (type-sample)
-  `(lambda (my-ns tag-name) 
+  `(lambda (my-ns tag-name xmlns) 
      (if tag-name
-         (concat "<" tag-name ">" ,type-sample "</"tag-name ">\n")
+         (concat "<" tag-name (if xmlns (concat " xmlns=\"" xmlns "\"")) ">" ,type-sample "</"tag-name ">\n")
        ,type-sample)))
 
 (defun define-simple-type (namespace type-node)
@@ -337,8 +342,8 @@
 
 (defun create-simple-type-print-function (type-node)
   (cond ((xsd-simple-type-by-restriction? type-node)
-         `(lambda (my-ns tag-name) 
-            (funcall (get-type my-ns ,(xsd-get-restriction-base-type type-node)) tag-name)))
+         `(lambda (my-ns tag-name xmlns) 
+            (funcall (get-type my-ns ,(xsd-get-restriction-base-type type-node)) tag-name xmlns)))
         (t `(lambda (my-ns tag-name) 
               (cons tag-name "Simple type not by restriction, unsupported yet")))))
 
@@ -349,63 +354,72 @@
 
 (defun create-complex-type-print-function (type-node)
   (cond ((xsd-complex-type-with-sequence? type-node)
-         `(lambda (my-ns tag-name)
+         `(lambda (my-ns tag-name xmlns)
             (concat
-             "<" tag-name ,@(mapcar 'invoke-attribute-print-function (xsd-get-attributes type-node)) ">\n"
+             "<" tag-name (if xmlns (concat " xmlns=\"" xmlns "\"")) 
+             ,@(mapcar 'invoke-attribute-print-function (xsd-get-attributes type-node)) ">\n"
              ,@(mapcar 'create-local-element-print-function (xsd-get-sequence-elements type-node))
              "</" tag-name ">\n")))
         ((xsd-complex-type-with-all? type-node)
-         `(lambda (my-ns tag-name)
+         `(lambda (my-ns tag-name xmlns)
             (concat
-             "<" tag-name ,@(mapcar 'invoke-attribute-print-function (xsd-get-attributes type-node)) ">\n"
+             "<" tag-name (if xmlns (concat " xmlns=\"" xmlns "\""))
+             ,@(mapcar 'invoke-attribute-print-function (xsd-get-attributes type-node)) ">\n"
              ,@(mapcar 'create-local-element-print-function (reverse (xsd-get-all-elements type-node)))
              "</" tag-name ">\n")))
-        (t `(lambda (my-ns tag-name) "Unknown complex type"))))
+        (t `(lambda (my-ns tag-name xmlns) "Unknown complex type"))))
 
 
 ;; elements
 ;;---------
 (defun define-element (namespace element-node)
-  (let ((element (create-element-print-function element-node))
+  (let ((element (create-element-print-function element-node namespace))
         (name (node-attribute-value element-node "name")))
     (add-element! namespace name element)))
 
-(defun create-element-print-function (element-node)
-  (let ((element-name (node-attribute-value element-node "name")))
+(defun create-element-print-function (element-node namespace)
+  (let ((element-name (node-attribute-value element-node "name"))
+        (xmlns (namespace-name namespace)))
     (cond ((not (null (node-attribute-value element-node "type")))
            `(lambda (my-ns tag-name) 
               (funcall (get-type my-ns ,(node-attribute-value element-node "type")) 
-                       (or tag-name ,element-name))))
+                       (or tag-name ,element-name)
+                       (if tag-name nil ,xmlns))))
           ((not (null (node-attribute-value element-node "ref")))
            `(lambda (my-ns tag-name)
               (funcall (get-element my-ns ,(node-attribute-value element-node "ref")) 
-                       (or tag-name ,element-name))))
+                       (or tag-name nil))))
           ((xsd-element-with-inner-complex-type? element-node)
            `(lambda (my-ns tag-name)
               (funcall (create-complex-type-print-function ',(car (node-childs element-node)))
                      my-ns
-                     (or tag-name ,element-name))))
+                     (or tag-name ,element-name)
+                     (if tag-name nil ,xmlns))))
           ((xsd-element-with-inner-simple-type? element-node)
            `(lambda (my-ns tag-name)
               (funcall (create-simple-type-print-function ',(car (node-childs element-node)))
                      my-ns
-                     (or tag-name ,element-name))))
+                     (or tag-name ,element-name)
+                     (if tag-name nil ,xmlns))))
           (t `(lambda (my-ns tag-name) "Unknown element\n")))))
 
 (defun create-local-element-print-function (element-node)
   (cond ((not (null (node-attribute-value element-node "type")))
          `(funcall (get-type my-ns ,(node-attribute-value element-node "type")) 
-                   ,(node-attribute-value element-node "name")))
+                   ,(node-attribute-value element-node "name")
+                   nil))
         ((not (null (node-attribute-value element-node "ref")))
          `(funcall (get-element my-ns ,(node-attribute-value element-node "ref")) nil))
         ((xsd-element-with-inner-complex-type? element-node)
          `(funcall (create-complex-type-print-function ',(car (node-childs element-node)))
                    my-ns
-                   ,(node-attribute-value element-node "name")))
+                   ,(node-attribute-value element-node "name")
+                   nil))
         ((xsd-element-with-inner-simple-type? element-node)
          `(funcall (create-simple-type-print-function ',(car (node-childs element-node)))
                    my-ns
-                   ,(node-attribute-value element-node "name")))
+                   ,(node-attribute-value element-node "name")
+                   nil))
         (t "Unknown element\n")))
 
 
@@ -421,13 +435,13 @@
         (attribute-type (node-attribute-value attribute-node "type")))
     `(lambda (my-ns) 
        (concat " " ,attribute-name "=\""
-               (funcall (get-type my-ns ,attribute-type) nil)
+               (funcall (get-type my-ns ,attribute-type) nil nil)
                "\""))))
 
 (defun invoke-attribute-print-function (attribute-node)
   (cond ((not (null (node-attribute-value attribute-node "type")))
          `(concat " " ,(node-attribute-value attribute-node "name") "=\"" 
-                 (funcall (get-type my-ns ,(node-attribute-value attribute-node "type")) nil)
+                 (funcall (get-type my-ns ,(node-attribute-value attribute-node "type")) nil nil)
                  "\""))
         ((not (null (node-attribute-value attribute-node "ref")))
          `(funcall (get-attribute my-ns ,(node-attribute-value attribute-node "ref"))))

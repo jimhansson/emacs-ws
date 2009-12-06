@@ -41,7 +41,9 @@
               location)))))
 
 (defun create-soap-request-for-binding (wsdl-ns binding operation-name location)
-  (cons location (funcall binding 'get-request operation-name)))
+  (list location 
+        (funcall binding 'get-soap-action operation-name)
+        (funcall binding 'get-request operation-name)))
 
 (defun parse-wsdl (path) (parse-wsdl-tree (nxml-parse-file path) (expand-file-name path)))
 

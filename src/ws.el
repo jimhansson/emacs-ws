@@ -4,8 +4,12 @@
 (require 'ido)
 (require 'url)
 
-(defun create-soap-request (wsdl-nxml-tree)
-  (let* ((wsdl-ns (parse-wsdl-tree wsdl-nxml-tree))
+(defun create-soap-request (location)
+  (let* ((wsdl-nxml-tree (get-nxml-tree-for location)))
+    (create-soap-request-for-tree wsdl-nxml-tree location)))
+
+(defun create-soap-request-for-tree (wsdl-nxml-tree location)
+  (let* ((wsdl-ns (parse-wsdl-tree wsdl-nxml-tree location))
          (services (get-service-names wsdl-ns)))
     (cond ((equal (length services) 0)
            (error "No services found"))
@@ -39,10 +43,10 @@
 (defun create-soap-request-for-binding (wsdl-ns binding operation-name location)
   (cons location (funcall binding 'get-request operation-name)))
 
-(defun parse-wsdl (path) (parse-wsdl-tree (nxml-parse-file path)))
+(defun parse-wsdl (path) (parse-wsdl-tree (nxml-parse-file path) (expand-file-name path)))
 
-(defun parse-wsdl-tree (nxml-tree)
-  (let ((ns         (create-namespace (target-namespace nxml-tree)))
+(defun parse-wsdl-tree (nxml-tree location)
+  (let ((ns         (create-namespace (target-namespace nxml-tree) location))
         (msgs       (wsdl-get-messages nxml-tree))
         (aliases    (node-aliases nxml-tree))
         (port-types (wsdl-get-port-types nxml-tree))
@@ -54,13 +58,13 @@
     (mapc (lambda (binding-node) (define-binding ns binding-node)) bindings)
     (mapc (lambda (service-node) (define-service ns service-node)) services)
     (mapc (lambda (alias) (add-alias! ns (car alias) (cdr alias))) aliases)
-    (mapc (lambda (schema) (add-import! ns (parse-xsd-tree schema aliases))) schemas)
+    (mapc (lambda (schema) (add-import! ns (parse-xsd-tree schema location aliases))) schemas)
     ns))
 
 (defun parse-xsd (path) (parse-xsd-tree (nxml-parse-file path)))
 
-(defun parse-xsd-tree (nxml-tree &optional additional-aliases)
-  (let ((ns            (create-namespace     (target-namespace nxml-tree)))
+(defun parse-xsd-tree (nxml-tree location &optional additional-aliases)
+  (let ((ns            (create-namespace (target-namespace nxml-tree) location))
         (aliases       (node-aliases          nxml-tree))
         (simple-types  (xsd-get-simple-types  nxml-tree))
         (complex-types (xsd-get-complex-types nxml-tree))
@@ -76,13 +80,14 @@
 
 ;; namespaces
 ;;-----------
-(defun create-namespace (name) 
-  (let ((ns (create-empty-namespace name)))
+(defun create-namespace (name location) 
+  (let ((ns (create-empty-namespace name location)))
     (add-import! ns xsd-ns)
     ns))
 
-(defun create-empty-namespace (ns-name) 
-  (list (cons 'name ns-name)
+(defun create-empty-namespace (ns-name location) 
+  (list (cons 'name       ns-name)
+        (cons 'location   location)
         (cons 'imports    '())
         (cons 'aliases    '())
         (cons 'services   '())
@@ -94,6 +99,7 @@
         (cons 'messages   '())))
 
 (defun namespace-name (namespace) (cdr (assoc 'name namespace)))
+(defun namespace-location (namespace) (cdr (assoc 'location namespace)))
 
 (defun add-namespace-entry! (namespace entries-key new-entry)
   (let ((entries (assoc entries-key namespace)))
@@ -397,7 +403,7 @@
 
 ;;build-in xsd namespace
 (defconst xsd-ns 
-  (let ((ns (create-empty-namespace "http://www.w3.org/2001/XMLSchema")))
+  (let ((ns (create-empty-namespace "http://www.w3.org/2001/XMLSchema" nil)))
     (define-build-in-type ns "string"          "string")
     (define-build-in-type ns "int"             "1")
     (define-build-in-type ns "positiveInteger" "1")
@@ -493,6 +499,18 @@
       'done
     (kill-line)
     (delete-http-headers)))
+
+(defun resolve-url (url base-url)
+  "Expand location from import"
+  (cond ((elt (url-generic-parse-url url) 1) url) ;;correct url - simply return it
+        ((and (elt (url-generic-parse-url base-url) 1) ;; base-url is correct url
+              (not (elt (url-generic-parse-url url) 1))) ;; and imported location is not
+         (error (concat "can not resolve " url " relative to " base-url)))
+        ((and (not (elt (url-generic-parse-url base-url) 1)) ;; base-url is file
+              (not (elt (url-generic-parse-url url) 1))) ;; and url is file
+         (if (file-name-absolute-p url)
+             url
+           (concat (file-name-directory (expand-file-name base-url)) url)))))
 
 
 ;; functions to get wsdl-specific nodes:

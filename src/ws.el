@@ -45,7 +45,8 @@
       (rename-buffer (generate-new-buffer-name (concat service-location "-response")))
       (delete-http-headers)
       (nxml-mode)
-      (nd-xml-pretty-print))))
+;      (nd-xml-pretty-print)
+)))
 
 (defun create-soap-request (location)
   (let* ((wsdl-nxml-tree (get-nxml-tree-for location)))

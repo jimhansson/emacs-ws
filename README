@@ -1,1 +1,7 @@
 emacs-mode for testing web-services
+
+Ok, this is not mode yet, we use nxml and just add 2 functions: ws-me for creating request to server and ws-send for sending it. And we have problems with qualified/unqualified schemas, but it works for some services, try this:
+
+M-x ws-me http://www.ecubicle.net/gsearch_rss.asmx?WSDL
+edit query
+M-x ws-send 
